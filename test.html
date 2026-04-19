@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>PWA Pipeline Test</title>
+  <style>
+    body { font-family: ui-monospace, Menlo, monospace; background: #0a0e1a; color: #e8eaf0;
+      padding: 20px; margin: 0; font-size: 12px; }
+    #log { white-space: pre-wrap; line-height: 1.4; max-height: 45vh;
+      overflow-y: auto; background: #141824; padding: 12px; border-radius: 8px; }
+    video, canvas { max-width: 45%; border-radius: 4px; background: #000; }
+    .pass { color: #3ecf8e; font-weight: bold; }
+    .fail { color: #ff6b6b; font-weight: bold; }
+    button { padding: 8px 14px; background: #3ecf8e; color: #0a0e1a;
+      border: none; border-radius: 6px; cursor: pointer; font-weight: 700; margin-right: 8px; }
+    #chart { width: 100%; height: 200px; background: #141824; margin-top: 10px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h2>Juggle Counter — E2E Test (playback-based)</h2>
+  <p>Truth: <b>22</b></p>
+  <button id="run">Run Test</button>
+  <button id="rerun-count">Re-run Counter Only</button>
+  <button id="test-python">Test with Python Trace</button>
+  <div id="log">ready.</div>
+  <canvas id="chart"></canvas>
+  <video id="video" muted playsinline preload="auto"></video>
+
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js"></script>
+  <script async src="https://docs.opencv.org/4.9.0/opencv.js"></script>
+  <script type="module">
+    const _v = "?v=" + Date.now();
+    const { BallDetector } = await import("./src/detector.js" + _v);
+    const { JuggleCounter } = await import("./src/counter.js" + _v);
+    const { BallTracker } = await import("./src/tracker.js" + _v);
+
+    const log = document.getElementById("log");
+    const video = document.getElementById("video");
+    const chart = document.getElementById("chart");
+
+    const print = (s) => {
+      log.textContent += "\n" + s;
+      log.scrollTop = log.scrollHeight;
+      console.log(s);
+    };
+
+    window._trace = [];
+    let running = false;
+
+    document.getElementById("run").addEventListener("click", run);
+    document.getElementById("rerun-count").addEventListener("click", rerunCounter);
+    document.getElementById("test-python").addEventListener("click", testPythonTrace);
+
+    async function testPythonTrace() {
+      log.textContent = "";
+      print("Loading python_trace.json…");
+      const resp = await fetch("python_trace.json");
+      const data = await resp.json();
+      print(`Loaded ${data.trace.length} positions, fps=${data.fps.toFixed(2)}`);
+
+      const fps = data.fps;
+      const counter = new JuggleCounter({ fps });
+      const juggleFrames = [];
+      counter.onJuggle = (f) => juggleFrames.push(f);
+
+      const trace = [];
+      for (const p of data.trace) {
+        counter.push(p.f, p.y);
+        trace.push({ t: p.f / fps, y: p.y });
+      }
+      const count = counter.getCount();
+      const diff = count - 22;
+      const verdict = Math.abs(diff) <= 1 ? "PASS" : "FAIL";
+      print(`Juggle frames: [${juggleFrames.join(", ")}]`);
+      print(`COUNT = ${count}   TRUTH = 22   diff = ${diff>=0?"+":""}${diff}`);
+      log.innerHTML += `\n<span class="${verdict==="PASS"?"pass":"fail"}">${verdict}</span>`;
+      window._trace = trace;
+      drawChart(trace, juggleFrames.map(f => Math.round(f)));
+    }
+
+    async function run() {
+      if (running) { print("already running"); return; }
+      running = true;
+      log.textContent = "";
+      window._trace = [];
+
+      print("Loading model…");
+      const det = new BallDetector();
+      await det.load("model/yolov8n.onnx");
+      print("Loading OpenCV…");
+      const tracker = new BallTracker(det);
+      await tracker.init(print);
+
+      video.src = "test-video.mp4";
+      await new Promise(r => video.addEventListener("canplaythrough", r, { once: true }));
+      print(`Video: ${video.videoWidth}x${video.videoHeight}, ${video.duration.toFixed(2)}s`);
+
+      // Play slowly so we can detect on every (or most) frames.
+      // WASM CPU inference ~60-120ms/frame; at 0.2x we get 166ms budget per frame.
+      video.playbackRate = 0.1;
+
+      const trace = [];  // { mediaTime, y, source }
+      let lastPrint = 0;
+      let processing = false;
+      let framesSeen = 0;
+      let framesDetected = 0;
+      const bySource = { yolo: 0, flow: 0, extrap: 0 };
+
+      return new Promise((resolve) => {
+        const cb = async (_now, meta) => {
+          framesSeen++;
+          if (processing) {
+            if (!video.ended) video.requestVideoFrameCallback(cb);
+            return;
+          }
+          processing = true;
+          const realFrameIdx = Math.round(meta.mediaTime * 30);
+          const d = await tracker.track(video, realFrameIdx);
+          if (d) {
+            trace.push({ t: meta.mediaTime, y: d.cy, cx: d.cx, source: d.source });
+            framesDetected++;
+            bySource[d.source] = (bySource[d.source] || 0) + 1;
+          }
+          processing = false;
+
+          if (meta.mediaTime - lastPrint >= 1.0) {
+            lastPrint = meta.mediaTime;
+            print(`  t=${meta.mediaTime.toFixed(1)}s seen=${framesSeen} hits=${framesDetected} (yolo=${bySource.yolo} flow=${bySource.flow} ex=${bySource.extrap})`);
+          }
+          if (!video.ended) video.requestVideoFrameCallback(cb);
+          else finish();
+        };
+        const finish = () => {
+          running = false;
+          window._trace = trace;
+          print(`\nFrames seen: ${framesSeen}, detected: ${framesDetected}`);
+          if (trace.length) {
+            const ys = trace.map(p => p.y);
+            print(`Y range: ${Math.min(...ys).toFixed(0)} → ${Math.max(...ys).toFixed(0)}`);
+            print(`First 10 Y: ${trace.slice(0,10).map(p => p.y.toFixed(0)).join(" ")}`);
+          }
+          rerunCounter();
+          resolve();
+        };
+
+        video.addEventListener("ended", finish, { once: true });
+        video.requestVideoFrameCallback(cb);
+        video.play();
+      });
+    }
+
+    function rerunCounter() {
+      const trace = window._trace;
+      if (!trace?.length) { print("no trace"); return; }
+
+      // Convert mediaTime → frame index at 30fps
+      const fps = 30;
+      const counter = new JuggleCounter({ fps });
+      const juggleFrames = [];
+      counter.onJuggle = (f) => juggleFrames.push(f);
+
+      for (const p of trace) {
+        const f = Math.round(p.t * fps);
+        counter.push(f, p.y);
+      }
+      const count = counter.getCount();
+      const diff = count - 22;
+      const verdict = Math.abs(diff) <= 1 ? "PASS" : "FAIL";
+      print("");
+      print("=".repeat(40));
+      print(`Juggle frames: [${juggleFrames.join(", ")}]`);
+      print(`COUNT = ${count}   TRUTH = 22   diff = ${diff>=0?"+":""}${diff}`);
+      log.innerHTML += `\n<span class="${verdict==="PASS"?"pass":"fail"}">${verdict}</span>`;
+      drawChart(trace, juggleFrames);
+    }
+
+    function drawChart(trace, marks = []) {
+      const ctx = chart.getContext("2d");
+      const w = chart.width = chart.clientWidth || 800;
+      const h = chart.height = 200;
+      ctx.fillStyle = "#141824";
+      ctx.fillRect(0, 0, w, h);
+      if (!trace.length) return;
+      const ys = trace.map(p => p.y);
+      const ts = trace.map(p => p.t);
+      const yMin = Math.min(...ys), yMax = Math.max(...ys);
+      const tMin = Math.min(...ts), tMax = Math.max(...ts);
+      const yRange = yMax - yMin || 1;
+      const tRange = tMax - tMin || 1;
+      ctx.strokeStyle = "#3ecf8e";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      trace.forEach((p, i) => {
+        const x = (p.t - tMin) / tRange * w;
+        const y = (p.y - yMin) / yRange * (h - 20) + 10;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.fillStyle = "#ff6b6b";
+      for (const f of marks) {
+        const t = f / 30;
+        const x = (t - tMin) / tRange * w;
+        ctx.fillRect(x - 2, 0, 4, h);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0a0e1a" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <title>Juggle Counter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #000; color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden; -webkit-user-select: none; user-select: none; }
+
+    #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+
+    /* Camera / canvas stage */
+    #stage { position: relative; flex: 1; background: #000; overflow: hidden; }
+    #video, #overlay { position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: contain; }
+    #video { z-index: 0; transform: scaleX(-1); } /* mirror front camera */
+    #overlay { z-index: 1; pointer-events: none; }
+
+    /* Top HUD: count */
+    #count-hud {
+      position: absolute; top: env(safe-area-inset-top, 20px); left: 0; right: 0;
+      z-index: 2; text-align: center; pointer-events: none;
+    }
+    #count { font-size: 7rem; font-weight: 900; color: #3ecf8e;
+      line-height: 1; text-shadow: 0 4px 24px rgba(0,0,0,0.8); }
+    #count-label { font-size: 0.9rem; letter-spacing: 2px;
+      color: rgba(255,255,255,0.7); text-transform: uppercase; margin-top: 4px; }
+
+    /* Status line */
+    #status { position: absolute; top: env(safe-area-inset-top, 20px); left: 16px;
+      z-index: 2; background: rgba(0,0,0,0.5); color: #8892a4;
+      padding: 6px 12px; border-radius: 20px; font-size: 0.75rem;
+      font-family: ui-monospace, Menlo, monospace; }
+    #status.error { color: #ff6b6b; }
+
+    /* Bottom controls */
+    #controls {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 20px));
+      z-index: 3; display: flex; gap: 12px; justify-content: center; align-items: center;
+    }
+    button.pill {
+      min-width: 120px; padding: 14px 20px; border: none; border-radius: 999px;
+      font-size: 1rem; font-weight: 700; cursor: pointer;
+      background: rgba(30,37,53,0.8); color: #fff;
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    }
+    button.pill.primary { background: #3ecf8e; color: #0a0e1a; }
+    button.pill.danger  { background: #ff4b4b; }
+    button.pill:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.pill.record-active { background: #ff4b4b; animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+    /* Start screen */
+    #start-screen {
+      position: absolute; inset: 0; z-index: 10;
+      background: linear-gradient(180deg, #0a0e1a 0%, #141824 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 40px 24px; text-align: center;
+    }
+    #start-screen.hidden { display: none; }
+    #start-screen h1 { font-size: 2.4rem; font-weight: 900; margin-bottom: 12px; }
+    #start-screen h1 span { color: #3ecf8e; }
+    #start-screen p { color: #8892a4; margin-bottom: 32px; max-width: 300px; }
+    #start-btn {
+      padding: 18px 40px; font-size: 1.1rem; font-weight: 800;
+      background: #3ecf8e; color: #0a0e1a; border: none; border-radius: 14px;
+      cursor: pointer;
+    }
+    #model-load { margin-top: 20px; color: #5a6478; font-size: 0.85rem;
+      font-family: ui-monospace, Menlo, monospace; min-height: 1.2em; }
+
+    /* Video test mode: upload a video instead of camera */
+    #upload-label {
+      display: inline-block; margin-top: 16px;
+      color: #3ecf8e; font-size: 0.9rem; text-decoration: underline;
+      cursor: pointer;
+    }
+    #upload-input { display: none; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="start-screen">
+      <h1>⚽ Juggle <span>Counter</span></h1>
+      <p>Point your camera at a juggler. The AI will count every touch and reset when the ball hits the ground.</p>
+      <button id="start-btn">Start Camera</button>
+      <label id="upload-label" for="upload-input">or test with a video file</label>
+      <input id="upload-input" type="file" accept="video/*" />
+      <div id="model-load">Loading model…</div>
+    </div>
+
+    <div id="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="status">initializing…</div>
+      <div id="count-hud">
+        <div id="count">0</div>
+        <div id="count-label">Juggles</div>
+      </div>
+    </div>
+
+    <div id="controls">
+      <button class="pill" id="reset-btn">Reset</button>
+      <button class="pill primary" id="record-btn">⏺ Record</button>
+      <button class="pill" id="stop-btn">Stop</button>
+    </div>
+  </div>
+
+  <!-- ONNX Runtime Web (WASM backend works on iOS Safari; WebGL faster on desktop) -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js"></script>
+  <script async src="https://docs.opencv.org/4.9.0/opencv.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
