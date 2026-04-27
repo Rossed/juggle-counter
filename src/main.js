@@ -131,7 +131,7 @@ async function loop(ts) {
     els.count.textContent = "0";
     setStatus("reset — ball on ground");
   } else {
-    setStatus(`${fpsEMA.toFixed(0)} fps · ${pos ? pos.source : "no ball"}`);
+    setStatus(`${fpsEMA.toFixed(0)} fps · ${detector.provider || "?"} · ${pos ? pos.source : "no ball"}`);
   }
 
   frameIdx += 1;

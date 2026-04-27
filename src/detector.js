@@ -17,17 +17,40 @@ export class BallDetector {
 
   async load(modelUrl, onProgress) {
     onProgress?.("loading model…");
-    // WASM backend — most compatible with iOS Safari.
-    // WebGL / WebGPU can be much faster on desktop but iOS support is spotty.
     ort.env.wasm.simd = true;
     ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
     ort.env.wasm.wasmPaths =
       "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/";
-    this.session = await ort.InferenceSession.create(modelUrl, {
-      executionProviders: ["wasm"],
-      graphOptimizationLevel: "all",
-    });
-    onProgress?.("model ready");
+
+    // Prefer WebGPU (iOS 18+, Chrome/Edge desktop) — ~5-10x faster than WASM.
+    // Fall back to WASM if unavailable or fails to initialize.
+    const tryProviders = async (providers) => {
+      this.session = await ort.InferenceSession.create(modelUrl, {
+        executionProviders: providers,
+        graphOptimizationLevel: "all",
+      });
+    };
+
+    let provider = "wasm";
+    if ("gpu" in navigator) {
+      try {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (adapter) {
+          onProgress?.("trying WebGPU…");
+          await tryProviders(["webgpu"]);
+          provider = "webgpu";
+        }
+      } catch (e) {
+        console.warn("WebGPU init failed, falling back to WASM:", e);
+        this.session = null;
+      }
+    }
+    if (!this.session) {
+      onProgress?.("loading WASM…");
+      await tryProviders(["wasm"]);
+    }
+    this.provider = provider;
+    onProgress?.(`model ready (${provider})`);
   }
 
   // Preprocess: source frame → letterboxed 640x640 CHW float32 [0,1].
