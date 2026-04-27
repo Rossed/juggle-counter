@@ -32,21 +32,28 @@ export class BallDetector {
     };
 
     let provider = "wasm";
+    this.providerError = null;
     if ("gpu" in navigator) {
       try {
+        onProgress?.("requesting GPU adapter…");
         const adapter = await navigator.gpu.requestAdapter();
-        if (adapter) {
+        if (!adapter) {
+          this.providerError = "no GPU adapter (flag off?)";
+        } else {
           onProgress?.("trying WebGPU…");
           await tryProviders(["webgpu"]);
           provider = "webgpu";
         }
       } catch (e) {
+        this.providerError = `webgpu err: ${e.message}`;
         console.warn("WebGPU init failed, falling back to WASM:", e);
         this.session = null;
       }
+    } else {
+      this.providerError = "navigator.gpu missing";
     }
     if (!this.session) {
-      onProgress?.("loading WASM…");
+      onProgress?.(`WASM fallback (${this.providerError || "no webgpu"})`);
       await tryProviders(["wasm"]);
     }
     this.provider = provider;
