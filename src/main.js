@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const VERSION = "v23";
+const VERSION = "v24";
 const _v = `?v=${VERSION.slice(1)}`;
 // Set permanent version badge — never overwritten by other code
 const _setBadge = () => {

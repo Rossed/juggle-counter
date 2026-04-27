@@ -166,7 +166,7 @@
   </div>
 
   <!-- ONNX Runtime Web (WASM backend works on iOS Safari; WebGL faster on desktop) -->
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.webgpu.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.webgpu.min.js"></script>
   <script>
     // Only load OpenCV.js if flow is enabled — saves ~8MB on iOS.
     if ((localStorage.getItem("useFlow") ?? "1") !== "0") {
@@ -176,6 +176,6 @@
       document.head.appendChild(s);
     }
   </script>
-  <script type="module" src="src/main.js?v=23"></script>
+  <script type="module" src="src/main.js?v=24"></script>
 </body>
 </html>

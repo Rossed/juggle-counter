@@ -23,7 +23,7 @@ export class BallDetector {
     ort.env.wasm.simd = true;
     ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
     ort.env.wasm.wasmPaths =
-      "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/";
+      "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/";
 
     // Prefer WebGPU (iOS 18+, Chrome/Edge desktop) — ~5-10x faster than WASM.
     // Fall back to WASM if unavailable or fails to initialize.
