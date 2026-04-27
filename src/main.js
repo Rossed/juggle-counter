@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=6";
+const _v = "?v=7";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -163,6 +163,7 @@ function sizeOverlay() {
 }
 
 function startProcessing() {
+  debug.push(`startProcessing: video ${els.video.videoWidth}x${els.video.videoHeight} rs=${els.video.readyState}`);
   running = true;
   frameIdx = 0;
   counter.reset();
@@ -171,11 +172,15 @@ function startProcessing() {
   els.count.textContent = "0";
   sizeOverlay();
   requestAnimationFrame(loop);
+  // Belt-and-braces: confirm rAF is firing
+  setTimeout(() => debug.push(`1s post-start: frames=${debug.stats.frames} running=${running}`), 1000);
 }
 
 let _waitLogged = false;
+let _firstLoop = true;
 async function loop(ts) {
-  if (!running) return;
+  if (_firstLoop) { debug.push(`loop: first tick`); _firstLoop = false; }
+  if (!running) { debug.push(`loop: !running, exit`); return; }
   if (els.video.readyState < 2) {
     if (!_waitLogged) { debug.push(`waiting on video rs=${els.video.readyState}`); _waitLogged = true; }
     requestAnimationFrame(loop);
