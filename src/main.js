@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=5";
+const _v = "?v=6";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -127,12 +127,31 @@ async function startCamera() {
 }
 
 async function startVideoFile(file) {
+  debug.push(`upload: ${file.name} ${file.type} ${(file.size/1e6).toFixed(1)}MB`);
   els.video.srcObject = null;
   els.video.src = URL.createObjectURL(file);
   els.video.loop = false;
   els.video.muted = true;
-  els.video.style.transform = "none"; // don't mirror uploaded videos
-  await els.video.play();
+  els.video.playsInline = true;
+  els.video.style.transform = "none";
+
+  // Wait for metadata so videoWidth/Height are set
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("metadata timeout 8s")), 8000);
+    els.video.addEventListener("loadedmetadata", () => { clearTimeout(t); resolve(); }, { once: true });
+    els.video.addEventListener("error", (e) => { clearTimeout(t); reject(new Error("video error")); }, { once: true });
+  }).catch(e => debug.push(`meta err: ${e.message}`));
+  debug.push(`meta: ${els.video.videoWidth}x${els.video.videoHeight} dur=${els.video.duration?.toFixed(1)}s rs=${els.video.readyState}`);
+
+  try {
+    await els.video.play();
+    debug.push(`play() ok, paused=${els.video.paused} rs=${els.video.readyState}`);
+  } catch (e) {
+    debug.push(`play() ERR: ${e.message}`);
+    alert("Couldn't play that video on iOS Safari: " + e.message);
+    return;
+  }
+
   els.startScreen.classList.add("hidden");
   startProcessing();
 }
@@ -154,9 +173,15 @@ function startProcessing() {
   requestAnimationFrame(loop);
 }
 
+let _waitLogged = false;
 async function loop(ts) {
   if (!running) return;
-  if (els.video.readyState < 2) { requestAnimationFrame(loop); return; }
+  if (els.video.readyState < 2) {
+    if (!_waitLogged) { debug.push(`waiting on video rs=${els.video.readyState}`); _waitLogged = true; }
+    requestAnimationFrame(loop);
+    return;
+  }
+  if (_waitLogged) { debug.push(`video ready rs=${els.video.readyState}`); _waitLogged = false; }
 
   if (els.overlay.width !== els.video.videoWidth) sizeOverlay();
 
