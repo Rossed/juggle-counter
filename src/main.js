@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=9";
+const _v = "?v=10";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -145,7 +145,10 @@ async function startVideoFile(file) {
 
   try {
     await els.video.play();
-    debug.push(`play() ok, paused=${els.video.paused} rs=${els.video.readyState}`);
+    // Slow down playback so on-device WebGPU can hit every frame.
+    // (Real-time camera doesn't have this luxury — file mode only.)
+    els.video.playbackRate = 0.25;
+    debug.push(`play() ok, paused=${els.video.paused} rs=${els.video.readyState} rate=${els.video.playbackRate}`);
   } catch (e) {
     debug.push(`play() ERR: ${e.message}`);
     alert("Couldn't play that video on iOS Safari: " + e.message);
