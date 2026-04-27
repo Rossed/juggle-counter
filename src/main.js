@@ -6,6 +6,41 @@ import { GroundResetDetector } from "./ground.js";
 
 const $ = (id) => document.getElementById(id);
 
+// ---------- Debug logger ----------
+const debug = {
+  log: [],
+  stats: { fps: 0, yolo: 0, flow: 0, extrap: 0, miss: 0, juggles: 0, frames: 0 },
+  push(msg) {
+    const ts = ((performance.now() - this.t0) / 1000).toFixed(1);
+    const line = `${ts}s ${msg}`;
+    this.log.push(line);
+    if (this.log.length > 400) this.log.shift();
+    this.render();
+  },
+  bump(k) { this.stats[k] = (this.stats[k] || 0) + 1; },
+  set(k, v) { this.stats[k] = v; },
+  render() {
+    const panel = document.getElementById("debug-panel");
+    if (panel.classList.contains("hidden")) return;
+    const s = this.stats;
+    document.getElementById("debug-stats").textContent =
+      `fps=${s.fps.toFixed(1)} provider=${s.provider||"?"} ` +
+      `frames=${s.frames} yolo=${s.yolo} flow=${s.flow} ` +
+      `extrap=${s.extrap} miss=${s.miss} juggles=${s.juggles}`;
+    document.getElementById("debug-log").textContent = this.log.slice(-15).join("\n");
+  },
+  fullDump() {
+    const s = this.stats;
+    return `JUGGLE COUNTER DEBUG LOG\n` +
+      `ua: ${navigator.userAgent}\n` +
+      `provider: ${s.provider}\n` +
+      `final stats: ${JSON.stringify(s, null, 2)}\n\n` +
+      `--- events ---\n${this.log.join("\n")}\n`;
+  },
+  t0: performance.now(),
+};
+window._debug = debug;
+
 const els = {
   startScreen: $("start-screen"),
   startBtn:    $("start-btn"),
@@ -32,11 +67,13 @@ let fpsEMA = 30;
 let recorder = null;
 let recordedChunks = [];
 
-counter.onJuggle = () => {
+counter.onJuggle = (frame) => {
   els.count.textContent = counter.getCount();
   els.count.style.transform = "scale(1.15)";
   setTimeout(() => (els.count.style.transform = "scale(1)"), 120);
   if (navigator.vibrate) navigator.vibrate(30);
+  debug.bump("juggles");
+  debug.push(`JUGGLE #${counter.getCount()} @frame=${frame}`);
 };
 
 function setStatus(msg, isError = false) {
@@ -46,13 +83,23 @@ function setStatus(msg, isError = false) {
 
 async function initModel() {
   try {
-    await detector.load("model/yolov8n.onnx", (m) => (els.modelLoad.textContent = m));
+    debug.push("loading YOLO model");
+    await detector.load("model/yolov8n.onnx", (m) => {
+      els.modelLoad.textContent = m;
+      debug.push(`model: ${m}`);
+    });
+    debug.set("provider", detector.provider);
+    debug.push(`provider=${detector.provider}`);
     els.modelLoad.textContent = "Loading OpenCV…";
-    await tracker.init((m) => (els.modelLoad.textContent = m));
-    els.modelLoad.textContent = "Model ready ✓";
+    await tracker.init((m) => {
+      els.modelLoad.textContent = m;
+      debug.push(`opencv: ${m}`);
+    });
+    els.modelLoad.textContent = `Model ready ✓ (${detector.provider})`;
     els.startBtn.disabled = false;
   } catch (err) {
     els.modelLoad.textContent = `Model load failed: ${err.message}`;
+    debug.push(`ERR: ${err.message}`);
     console.error(err);
   }
 }
@@ -118,7 +165,15 @@ async function loop(ts) {
 
   const pos = await tracker.track(els.video, frameIdx);
 
-  if (pos) counter.push(frameIdx, pos.cy);
+  debug.bump("frames");
+  if (pos) {
+    debug.bump(pos.source);
+    counter.push(frameIdx, pos.cy);
+  } else {
+    debug.bump("miss");
+  }
+  debug.set("fps", fpsEMA);
+  if (frameIdx % 30 === 0) debug.render();
   drawOverlay(pos);
 
   // Ground reset
@@ -216,6 +271,33 @@ els.resetBtn.addEventListener("click", () => {
 });
 els.recordBtn.addEventListener("click", toggleRecording);
 els.stopBtn.addEventListener("click", stopAll);
+
+// Debug overlay wiring
+document.getElementById("debug-toggle").addEventListener("click", () => {
+  document.getElementById("debug-panel").classList.toggle("hidden");
+  debug.render();
+});
+document.getElementById("debug-share").addEventListener("click", async () => {
+  const text = debug.fullDump();
+  const blob = new Blob([text], { type: "text/plain" });
+  const file = new File([blob], `juggle-debug-${Date.now()}.txt`, { type: "text/plain" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "Juggle debug log" });
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      alert("Log copied to clipboard");
+    } else {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = file.name;
+      a.click();
+    }
+  } catch (e) {
+    console.error(e);
+    alert("Share failed: " + e.message);
+  }
+});
 
 els.startBtn.disabled = true;
 initModel();
