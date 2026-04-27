@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=17";
+const _v = "?v=18";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -390,6 +390,14 @@ if (flowToggle) {
   flowToggle.checked = (localStorage.getItem("useFlow") ?? "1") !== "0";
   flowToggle.addEventListener("change", () => {
     localStorage.setItem("useFlow", flowToggle.checked ? "1" : "0");
+    alert("Reload to apply.");
+  });
+}
+const wasmToggle = document.getElementById("wasm-toggle");
+if (wasmToggle) {
+  wasmToggle.checked = localStorage.getItem("forceWasm") === "1";
+  wasmToggle.addEventListener("change", () => {
+    localStorage.setItem("forceWasm", wasmToggle.checked ? "1" : "0");
     alert("Reload to apply.");
   });
 }

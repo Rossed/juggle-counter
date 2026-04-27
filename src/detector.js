@@ -36,7 +36,10 @@ export class BallDetector {
 
     let provider = "wasm";
     this.providerError = null;
-    if ("gpu" in navigator) {
+    const forceWasm = localStorage.getItem("forceWasm") === "1";
+    if (forceWasm) {
+      this.providerError = "forced via localStorage";
+    } else if ("gpu" in navigator) {
       try {
         onProgress?.("requesting GPU adapter…");
         const adapter = await navigator.gpu.requestAdapter();

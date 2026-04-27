@@ -126,6 +126,9 @@
           <label style="display:flex; gap:6px; align-items:center; margin-top:8px; font-size:0.7rem;">
             <input id="flow-toggle" type="checkbox" /> Use optical flow (OpenCV)
           </label>
+          <label style="display:flex; gap:6px; align-items:center; margin-top:4px; font-size:0.7rem;">
+            <input id="wasm-toggle" type="checkbox" /> Force WASM (skip WebGPU)
+          </label>
         </div>
       </details>
     </div>
@@ -156,6 +159,6 @@
   <!-- ONNX Runtime Web (WASM backend works on iOS Safari; WebGL faster on desktop) -->
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.webgpu.min.js"></script>
   <script async src="https://docs.opencv.org/4.9.0/opencv.js"></script>
-  <script type="module" src="src/main.js?v=17"></script>
+  <script type="module" src="src/main.js?v=18"></script>
 </body>
 </html>
