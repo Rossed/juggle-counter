@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=18";
+const _v = "?v=19";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -57,7 +57,7 @@ const debug = {
         },
         body: JSON.stringify({ files: { "log.txt": { content: body } } }),
       }).catch(e => console.warn("gist patch failed", e));
-    }, 1500);
+    }, 300);
   },
   push(msg) {
     const ts = ((performance.now() - this.t0) / 1000).toFixed(1);
@@ -92,6 +92,9 @@ const debug = {
 window._debug = debug;
 debug.initRemote();
 debug.push(`====== SESSION START ${new Date().toISOString()} ua=${navigator.userAgent.slice(0,60)} ======`);
+// Catch early errors and push them to gist
+window.addEventListener("error", (e) => debug.push(`UNCAUGHT: ${e.message} at ${e.filename}:${e.lineno}`));
+window.addEventListener("unhandledrejection", (e) => debug.push(`UNHANDLED: ${e.reason?.message || e.reason}`));
 
 const els = {
   startScreen: $("start-screen"),
