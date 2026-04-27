@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const VERSION = "v22";
+const VERSION = "v23";
 const _v = `?v=${VERSION.slice(1)}`;
 // Set permanent version badge — never overwritten by other code
 const _setBadge = () => {
@@ -55,6 +55,7 @@ const debug = {
         method: "PATCH",
         headers: { Authorization: `Bearer ${this._pat}`, Accept: "application/vnd.github+json" },
         body: JSON.stringify({ files: { "log.txt": { content: body } } }),
+        keepalive: true,
       }).catch(() => {});
     }).catch(e => console.warn("gist create failed", e));
   },
@@ -74,6 +75,7 @@ const debug = {
           Accept: "application/vnd.github+json",
         },
         body: JSON.stringify({ files: { "log.txt": { content: body } } }),
+        keepalive: true,
       }).catch(e => console.warn("gist patch failed", e));
     }, 300);
   },
@@ -113,6 +115,21 @@ debug.push(`====== SESSION START ${new Date().toISOString()} ua=${navigator.user
 // Catch early errors and push them to gist
 window.addEventListener("error", (e) => debug.push(`UNCAUGHT: ${e.message} at ${e.filename}:${e.lineno}`));
 window.addEventListener("unhandledrejection", (e) => debug.push(`UNHANDLED: ${e.reason?.message || e.reason}`));
+// Final flush on unload — keepalive lets the request survive page death.
+const finalFlush = () => {
+  if (!debug._gistId || !debug._pat) return;
+  debug.push(`PAGEHIDE state=${document.visibilityState}`);
+  const body = debug.fullDump();
+  fetch(`https://api.github.com/gists/${debug._gistId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${debug._pat}`, Accept: "application/vnd.github+json" },
+    body: JSON.stringify({ files: { "log.txt": { content: body } } }),
+    keepalive: true,
+  }).catch(() => {});
+};
+window.addEventListener("pagehide", finalFlush);
+window.addEventListener("beforeunload", finalFlush);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") finalFlush(); });
 
 const els = {
   startScreen: $("start-screen"),
