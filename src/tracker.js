@@ -7,6 +7,9 @@ export class BallTracker {
     this.maxFlowFrames = opts.maxFlowFrames ?? 30;
     this.maxVelFrames = opts.maxVelFrames ?? 2;
     this.workW = opts.workW ?? 480;
+    // Allow disabling optical flow at runtime via localStorage to isolate
+    // memory leaks. Without flow we fall back to YOLO + velocity extrap only.
+    this.useFlow = (localStorage.getItem("useFlow") ?? "1") !== "0";
     this.cv = null;
     this.ready = false;
     this.reset();
@@ -14,6 +17,11 @@ export class BallTracker {
 
   async init(onProgress) {
     if (this.ready) return;
+    if (!this.useFlow) {
+      onProgress?.("OpenCV skipped (flow disabled)");
+      this.ready = true;
+      return;
+    }
     onProgress?.("loading OpenCV…");
     if (!window.cv || !window.cv.Mat) {
       await new Promise((resolve) => {
@@ -71,6 +79,19 @@ export class BallTracker {
     const cv = this.cv;
 
     const det = await this.detector.detect(source);
+
+    // Flow-disabled mode: YOLO-only with velocity extrapolation fallback.
+    if (!this.useFlow) {
+      if (det) {
+        const p = { frame: frameIdx, cx: det.cx, cy: det.cy, conf: det.conf, source: "yolo" };
+        this.history.push(p);
+        if (this.history.length > 60) this.history.shift();
+        this.missStreak = 0;
+        return p;
+      }
+      return this._velocityFallback(frameIdx);
+    }
+
     const { gray, scale } = this._grabGray(source);
 
     if (det) {

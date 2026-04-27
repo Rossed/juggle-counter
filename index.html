@@ -123,6 +123,9 @@
             <button id="pat-clear" style="padding:4px 10px; border-radius:6px; border:none; background:#2a3144; color:#fff; font-size:0.75rem;">Clear</button>
           </div>
           <div id="pat-status" style="font-size:0.7rem;"></div>
+          <label style="display:flex; gap:6px; align-items:center; margin-top:8px; font-size:0.7rem;">
+            <input id="flow-toggle" type="checkbox" /> Use optical flow (OpenCV)
+          </label>
         </div>
       </details>
     </div>
@@ -153,6 +156,6 @@
   <!-- ONNX Runtime Web (WASM backend works on iOS Safari; WebGL faster on desktop) -->
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.webgpu.min.js"></script>
   <script async src="https://docs.opencv.org/4.9.0/opencv.js"></script>
-  <script type="module" src="src/main.js?v=16"></script>
+  <script type="module" src="src/main.js?v=17"></script>
 </body>
 </html>

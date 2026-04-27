@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=16";
+const _v = "?v=17";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -141,7 +141,7 @@ async function initModel() {
       debug.push(`model: ${m}`);
     });
     debug.set("provider", detector.provider);
-    debug.push(`provider=${detector.provider}`);
+    debug.push(`provider=${detector.provider} useFlow=${tracker.useFlow}`);
     els.modelLoad.textContent = "Loading OpenCV…";
     await tracker.init((m) => {
       els.modelLoad.textContent = m;
@@ -384,6 +384,15 @@ document.getElementById("pat-clear")?.addEventListener("click", () => {
   refreshPatStatus();
 });
 refreshPatStatus();
+
+const flowToggle = document.getElementById("flow-toggle");
+if (flowToggle) {
+  flowToggle.checked = (localStorage.getItem("useFlow") ?? "1") !== "0";
+  flowToggle.addEventListener("change", () => {
+    localStorage.setItem("useFlow", flowToggle.checked ? "1" : "0");
+    alert("Reload to apply.");
+  });
+}
 
 // Wire up UI
 els.startBtn.addEventListener("click", startCamera);
