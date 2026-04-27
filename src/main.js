@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=19";
+const _v = "?v=20";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -37,7 +37,14 @@ const debug = {
     }).then(r => r.json()).then(g => {
       this._gistId = g.id;
       console.log("debug gist:", g.html_url);
-      this._scheduleFlush();
+      // Immediate (non-debounced) flush of whatever has accumulated
+      this._gistDirty = true;
+      const body = this.fullDump();
+      fetch(`https://api.github.com/gists/${this._gistId}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${this._pat}`, Accept: "application/vnd.github+json" },
+        body: JSON.stringify({ files: { "log.txt": { content: body } } }),
+      }).catch(() => {});
     }).catch(e => console.warn("gist create failed", e));
   },
   _scheduleFlush() {

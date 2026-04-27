@@ -158,7 +158,15 @@
 
   <!-- ONNX Runtime Web (WASM backend works on iOS Safari; WebGL faster on desktop) -->
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.webgpu.min.js"></script>
-  <script async src="https://docs.opencv.org/4.9.0/opencv.js"></script>
-  <script type="module" src="src/main.js?v=19"></script>
+  <script>
+    // Only load OpenCV.js if flow is enabled — saves ~8MB on iOS.
+    if ((localStorage.getItem("useFlow") ?? "1") !== "0") {
+      const s = document.createElement("script");
+      s.async = true;
+      s.src = "https://docs.opencv.org/4.9.0/opencv.js";
+      document.head.appendChild(s);
+    }
+  </script>
+  <script type="module" src="src/main.js?v=20"></script>
 </body>
 </html>
