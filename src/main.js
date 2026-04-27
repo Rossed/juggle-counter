@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=12";
+const _v = "?v=13";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -8,32 +8,56 @@ const { GroundResetDetector } = await import("./ground.js" + _v);
 const $ = (id) => document.getElementById(id);
 
 // ---------- Debug logger ----------
-// Each session also streams to https://ntfy.sh/<TOPIC> so we can read logs
-// remotely without you having to share-sheet the file.
-const NTFY_TOPIC = "juggle-counter-rossed-9k2x";
-const NTFY_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
+// Each session is mirrored to a private GitHub Gist owned by the user. The
+// PAT (scope: gist) lives in localStorage on the phone — never in the repo.
+// The agent reads logs by calling the GitHub API for that user's gists.
+const GIST_DESC_PREFIX = "juggle-debug";
 const debug = {
   log: [],
   stats: { fps: 0, yolo: 0, flow: 0, extrap: 0, miss: 0, juggles: 0, frames: 0 },
-  _ntfyQueue: [],
-  _ntfyFlushing: false,
-  _ntfy(line) {
-    this._ntfyQueue.push(line);
-    if (this._ntfyFlushing) return;
-    this._ntfyFlushing = true;
-    // Coalesce a few lines per network call
-    setTimeout(async () => {
-      const batch = this._ntfyQueue.splice(0);
-      this._ntfyFlushing = false;
-      if (!batch.length) return;
-      try {
-        await fetch(NTFY_URL, {
-          method: "POST",
-          body: batch.join("\n"),
-          headers: { Title: "juggle-counter" },
-        });
-      } catch {}
-    }, 250);
+  _gistId: null,
+  _gistDirty: false,
+  _gistFlushTimer: null,
+  _pat: null,
+  initRemote() {
+    this._pat = localStorage.getItem("ghPat") || null;
+    if (!this._pat) return;
+    // Create a fresh gist for this session
+    fetch("https://api.github.com/gists", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this._pat}`,
+        Accept: "application/vnd.github+json",
+      },
+      body: JSON.stringify({
+        description: `${GIST_DESC_PREFIX} ${new Date().toISOString()}`,
+        public: false,
+        files: { "log.txt": { content: "(session starting)\n" } },
+      }),
+    }).then(r => r.json()).then(g => {
+      this._gistId = g.id;
+      console.log("debug gist:", g.html_url);
+      this._scheduleFlush();
+    }).catch(e => console.warn("gist create failed", e));
+  },
+  _scheduleFlush() {
+    if (!this._gistId || !this._pat) return;
+    this._gistDirty = true;
+    if (this._gistFlushTimer) return;
+    this._gistFlushTimer = setTimeout(() => {
+      this._gistFlushTimer = null;
+      if (!this._gistDirty) return;
+      this._gistDirty = false;
+      const body = this.fullDump();
+      fetch(`https://api.github.com/gists/${this._gistId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${this._pat}`,
+          Accept: "application/vnd.github+json",
+        },
+        body: JSON.stringify({ files: { "log.txt": { content: body } } }),
+      }).catch(e => console.warn("gist patch failed", e));
+    }, 1500);
   },
   push(msg) {
     const ts = ((performance.now() - this.t0) / 1000).toFixed(1);
@@ -41,10 +65,10 @@ const debug = {
     this.log.push(line);
     if (this.log.length > 400) this.log.shift();
     this.render();
-    this._ntfy(line);
+    this._scheduleFlush();
   },
-  bump(k) { this.stats[k] = (this.stats[k] || 0) + 1; },
-  set(k, v) { this.stats[k] = v; },
+  bump(k) { this.stats[k] = (this.stats[k] || 0) + 1; this._scheduleFlush(); },
+  set(k, v) { this.stats[k] = v; this._scheduleFlush(); },
   render() {
     const panel = document.getElementById("debug-panel");
     if (panel.classList.contains("hidden")) return;
@@ -66,6 +90,7 @@ const debug = {
   t0: performance.now(),
 };
 window._debug = debug;
+debug.initRemote();
 debug.push(`====== SESSION START ${new Date().toISOString()} ua=${navigator.userAgent.slice(0,60)} ======`);
 
 const els = {
@@ -330,6 +355,28 @@ function toggleRecording() {
   els.recordBtn.textContent = "⏹ Stop Rec";
   els.recordBtn.classList.add("record-active");
 }
+
+// PAT input
+function refreshPatStatus() {
+  const el = document.getElementById("pat-status");
+  if (!el) return;
+  const pat = localStorage.getItem("ghPat");
+  el.textContent = pat ? `PAT set (…${pat.slice(-4)})` : "no PAT — logs local only";
+  el.style.color = pat ? "#3ecf8e" : "#5a6478";
+}
+document.getElementById("pat-save")?.addEventListener("click", () => {
+  const v = document.getElementById("pat-input").value.trim();
+  if (!v) return;
+  localStorage.setItem("ghPat", v);
+  document.getElementById("pat-input").value = "";
+  refreshPatStatus();
+  alert("PAT saved. Reload to start a new logging session.");
+});
+document.getElementById("pat-clear")?.addEventListener("click", () => {
+  localStorage.removeItem("ghPat");
+  refreshPatStatus();
+});
+refreshPatStatus();
 
 // Wire up UI
 els.startBtn.addEventListener("click", startCamera);
