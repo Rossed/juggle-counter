@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=11";
+const _v = "?v=12";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -8,15 +8,40 @@ const { GroundResetDetector } = await import("./ground.js" + _v);
 const $ = (id) => document.getElementById(id);
 
 // ---------- Debug logger ----------
+// Each session also streams to https://ntfy.sh/<TOPIC> so we can read logs
+// remotely without you having to share-sheet the file.
+const NTFY_TOPIC = "juggle-counter-rossed-9k2x";
+const NTFY_URL = `https://ntfy.sh/${NTFY_TOPIC}`;
 const debug = {
   log: [],
   stats: { fps: 0, yolo: 0, flow: 0, extrap: 0, miss: 0, juggles: 0, frames: 0 },
+  _ntfyQueue: [],
+  _ntfyFlushing: false,
+  _ntfy(line) {
+    this._ntfyQueue.push(line);
+    if (this._ntfyFlushing) return;
+    this._ntfyFlushing = true;
+    // Coalesce a few lines per network call
+    setTimeout(async () => {
+      const batch = this._ntfyQueue.splice(0);
+      this._ntfyFlushing = false;
+      if (!batch.length) return;
+      try {
+        await fetch(NTFY_URL, {
+          method: "POST",
+          body: batch.join("\n"),
+          headers: { Title: "juggle-counter" },
+        });
+      } catch {}
+    }, 250);
+  },
   push(msg) {
     const ts = ((performance.now() - this.t0) / 1000).toFixed(1);
     const line = `${ts}s ${msg}`;
     this.log.push(line);
     if (this.log.length > 400) this.log.shift();
     this.render();
+    this._ntfy(line);
   },
   bump(k) { this.stats[k] = (this.stats[k] || 0) + 1; },
   set(k, v) { this.stats[k] = v; },
@@ -41,6 +66,7 @@ const debug = {
   t0: performance.now(),
 };
 window._debug = debug;
+debug.push(`====== SESSION START ${new Date().toISOString()} ua=${navigator.userAgent.slice(0,60)} ======`);
 
 const els = {
   startScreen: $("start-screen"),
