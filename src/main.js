@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=10";
+const _v = "?v=11";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);

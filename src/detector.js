@@ -97,11 +97,19 @@ export class BallDetector {
     const pre = this._preprocess(source);
     const inputName = this.session.inputNames[0];
     const feeds = { [inputName]: pre.tensor };
-    const out = await this.session.run(feeds);
-    // YOLOv8 output shape: [1, 84, 8400]  (4 bbox + 80 class scores)
-    const outputName = this.session.outputNames[0];
-    const pred = out[outputName];
-    return this._postprocess(pred, pre);
+    let out;
+    try {
+      out = await this.session.run(feeds);
+      const outputName = this.session.outputNames[0];
+      const pred = out[outputName];
+      return this._postprocess(pred, pre);
+    } finally {
+      // Free GPU/WASM-side tensors — critical on iOS to avoid memory crash.
+      try { pre.tensor.dispose?.(); } catch {}
+      if (out) for (const k of Object.keys(out)) {
+        try { out[k].dispose?.(); } catch {}
+      }
+    }
   }
 
   _postprocess(pred, pre) {
