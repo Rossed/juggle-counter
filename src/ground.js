@@ -12,8 +12,9 @@ const DEFAULTS = {
   bottomFrac: 0.12,       // bottom 12% of the frame is "floor zone"
   stillMs: 400,           // must be in floor zone this long
   stillSpeedPxPerSec: 80, // max vertical speed to still count as "still"
-  missResetMs: 1500,      // missing ball this long triggers reset
-  cooldownMs: 2000,       // don't double-fire resets
+  missResetMs: 3500,      // missing ball this long triggers reset
+                          // (must exceed worst-case detection gap on slow hw)
+  cooldownMs: 2500,       // don't double-fire resets
 };
 
 export class GroundResetDetector {
