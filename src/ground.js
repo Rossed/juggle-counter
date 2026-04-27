@@ -12,8 +12,10 @@ const DEFAULTS = {
   bottomFrac: 0.12,       // bottom 12% of the frame is "floor zone"
   stillMs: 400,           // must be in floor zone this long
   stillSpeedPxPerSec: 80, // max vertical speed to still count as "still"
-  missResetMs: 3500,      // missing ball this long triggers reset
-                          // (must exceed worst-case detection gap on slow hw)
+  // Miss-based reset disabled. At low fps the detector legitimately loses the
+  // ball for several seconds during normal juggling, which was firing false
+  // resets. Floor-zone reset (below) still catches genuine ground-hits.
+  missResetMs: Number.POSITIVE_INFINITY,
   cooldownMs: 2500,       // don't double-fire resets
 };
 

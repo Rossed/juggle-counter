@@ -13,6 +13,9 @@ export class BallDetector {
     this.canvas.width = IMG_SIZE;
     this.canvas.height = IMG_SIZE;
     this.ctx = this.canvas.getContext("2d", { willReadFrequently: true });
+    // Pre-allocate ~4.9MB buffer reused every frame to avoid GC pressure
+    // (iOS Safari OOMs around 200-300 short-lived 5MB allocations).
+    this._chwBuf = new Float32Array(3 * IMG_SIZE * IMG_SIZE);
   }
 
   async load(modelUrl, onProgress) {
@@ -76,14 +79,16 @@ export class BallDetector {
     this.ctx.drawImage(source, padX, padY, dw, dh);
     const { data } = this.ctx.getImageData(0, 0, IMG_SIZE, IMG_SIZE);
 
-    // HWC RGBA uint8 → CHW RGB float32 / 255
-    const chw = new Float32Array(3 * IMG_SIZE * IMG_SIZE);
+    // HWC RGBA uint8 → CHW RGB float32 / 255 (reuses pre-allocated buffer).
+    const chw = this._chwBuf;
     const plane = IMG_SIZE * IMG_SIZE;
     for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-      chw[p] = data[i] / 255;              // R
-      chw[plane + p] = data[i + 1] / 255;  // G
-      chw[2 * plane + p] = data[i + 2] / 255; // B
+      chw[p] = data[i] / 255;
+      chw[plane + p] = data[i + 1] / 255;
+      chw[2 * plane + p] = data[i + 2] / 255;
     }
+    // ORT copies the data into a GPU buffer (WebGPU EP), so reusing the
+    // CPU-side Float32Array on the next frame is safe after run() resolves.
     return {
       tensor: new ort.Tensor("float32", chw, [1, 3, IMG_SIZE, IMG_SIZE]),
       scale, padX, padY, sw, sh,
