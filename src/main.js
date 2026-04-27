@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=7";
+const _v = "?v=8";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -173,7 +173,9 @@ function startProcessing() {
   sizeOverlay();
   requestAnimationFrame(loop);
   // Belt-and-braces: confirm rAF is firing
-  setTimeout(() => debug.push(`1s post-start: frames=${debug.stats.frames} running=${running}`), 1000);
+  setTimeout(() => debug.push(`1s: frames=${debug.stats.frames}`), 1000);
+  setTimeout(() => debug.push(`5s: frames=${debug.stats.frames}`), 5000);
+  setTimeout(() => debug.push(`15s: frames=${debug.stats.frames}`), 15000);
 }
 
 let _waitLogged = false;
@@ -194,7 +196,18 @@ async function loop(ts) {
   lastFrameTs = ts;
   fpsEMA = 0.9 * fpsEMA + 0.1 * (1000 / Math.max(1, dt));
 
-  const pos = await tracker.track(els.video, frameIdx);
+  if (frameIdx < 3) debug.push(`f${frameIdx}: pre-track`);
+  const t0 = performance.now();
+  let pos;
+  try {
+    pos = await tracker.track(els.video, frameIdx);
+  } catch (e) {
+    debug.push(`track ERR f${frameIdx}: ${e.message}`);
+    requestAnimationFrame(loop);
+    return;
+  }
+  const elapsed = performance.now() - t0;
+  if (frameIdx < 3) debug.push(`f${frameIdx}: track ok ${elapsed.toFixed(0)}ms src=${pos?.source||"none"}`);
 
   debug.bump("frames");
   if (pos) {
