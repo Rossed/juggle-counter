@@ -1,5 +1,5 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const _v = "?v=15";
+const _v = "?v=16";
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
@@ -251,6 +251,13 @@ async function loop(ts) {
   fpsEMA = 0.9 * fpsEMA + 0.1 * (1000 / Math.max(1, dt));
 
   if (frameIdx < 3) debug.push(`f${frameIdx}: pre-track`);
+  // Periodic heartbeat so we can see where the tab dies.
+  if (frameIdx > 0 && frameIdx % 30 === 0) {
+    const mem = performance.memory
+      ? ` js=${(performance.memory.usedJSHeapSize/1e6).toFixed(0)}MB`
+      : "";
+    debug.push(`tick f=${frameIdx} fps=${fpsEMA.toFixed(1)}${mem}`);
+  }
   const t0 = performance.now();
   let pos;
   try {
