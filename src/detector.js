@@ -2,7 +2,7 @@
 // Class 32 = "sports ball" in COCO.
 
 const BALL_CLASS = 32;
-const IMG_SIZE = 480;          // 480² runs ~1.8x faster than 640² on WebGPU
+const IMG_SIZE = 640;          // model has fixed 640x640 input — re-export onnx for smaller
 const CONF_THRESHOLD = 0.2;
 const IOU_THRESHOLD = 0.45;
 
