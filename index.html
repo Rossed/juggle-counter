@@ -103,9 +103,18 @@
       cursor: pointer;
     }
     #upload-input { display: none; }
+
+    /* Permanent version badge — top-left corner, never overwritten */
+    #version-badge {
+      position: fixed; top: 4px; left: 4px; z-index: 100;
+      background: rgba(0,0,0,0.6); color: #b8c4d8;
+      font-family: ui-monospace, Menlo, monospace; font-size: 9px;
+      padding: 2px 6px; border-radius: 4px; pointer-events: none;
+    }
   </style>
 </head>
 <body>
+  <div id="version-badge">v?</div>
   <div id="app">
     <div id="start-screen">
       <h1>⚽ Juggle <span>Counter</span></h1>
@@ -167,6 +176,6 @@
       document.head.appendChild(s);
     }
   </script>
-  <script type="module" src="src/main.js?v=21"></script>
+  <script type="module" src="src/main.js?v=22"></script>
 </body>
 </html>

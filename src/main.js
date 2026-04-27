@@ -1,10 +1,16 @@
 // Entry point. Wires detector → tracker → counter + ground-reset + UI + recording.
-const VERSION = "v21";
+const VERSION = "v22";
 const _v = `?v=${VERSION.slice(1)}`;
-window.addEventListener("DOMContentLoaded", () => {
-  const el = document.getElementById("model-load");
-  if (el) el.textContent = `[${VERSION}] ${el.textContent}`;
-});
+// Set permanent version badge — never overwritten by other code
+const _setBadge = () => {
+  const b = document.getElementById("version-badge");
+  if (b) b.textContent = VERSION;
+};
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", _setBadge);
+} else {
+  _setBadge();
+}
 const { BallDetector } = await import("./detector.js" + _v);
 const { BallTracker } = await import("./tracker.js" + _v);
 const { JuggleCounter } = await import("./counter.js" + _v);
